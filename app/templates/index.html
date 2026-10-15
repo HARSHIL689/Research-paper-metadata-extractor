@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ScholarMeta | Research Paper Metadata Extractor</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen font-sans">
+<header class="bg-white border-b border-slate-200 px-6 py-4">
+  <div class="max-w-7xl mx-auto flex flex-col gap-4 md:flex-row md:justify-between md:items-center">
+    <div>
+      <h1 class="font-bold text-xl text-slate-900">ScholarMeta</h1>
+      <p class="text-xs text-slate-500">Research Paper Metadata Extractor</p>
+    </div>
+    <div class="flex flex-wrap gap-2">
+      <a href="/download-excel" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium">Export Excel — Extracted Data</a>
+      <button type="button" id="apiExportBtn" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium">Export Excel — API Data</button>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-7xl mx-auto p-6 space-y-6">
+  <section class="bg-white rounded-xl border border-slate-200 p-8 shadow-sm">
+    <div id="dropzone" class="border-2 border-dashed border-slate-300 rounded-xl p-12 text-center cursor-pointer hover:border-blue-500 hover:bg-blue-50">
+      <input id="fileInput" type="file" accept=".pdf" class="hidden">
+      <div class="text-4xl mb-3">📄</div>
+      <h2 class="font-semibold text-lg">Upload a research paper PDF</h2>
+      <p class="text-sm text-slate-500 mt-1">Upload multiple papers one at a time. All uploaded papers remain available in the UI until you refresh.</p>
+      <button type="button" id="browse" class="mt-5 bg-slate-900 text-white px-5 py-2 rounded-lg text-sm">Browse PDF</button>
+    </div>
+    <div id="loading" class="hidden mt-5 text-center text-blue-700 text-sm">Extracting metadata…</div>
+    <div id="errorBox" class="hidden mt-5 bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg text-sm"></div>
+  </section>
+
+  <!-- Uploaded paper selector -->
+  <section id="uploadedSection" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+    <div class="px-6 py-4 border-b bg-slate-50 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <h2 class="font-semibold text-slate-900">Uploaded Papers</h2>
+        <p class="text-xs text-slate-500">Select one paper to view its extracted metadata.</p>
+      </div>
+      <div id="uploadedCount" class="text-xs font-medium text-slate-500"></div>
+    </div>
+    <div id="uploadedList" class="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+  </section>
+
+  <!-- API paper selector -->
+  <section id="apiPapersSection" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+    <div class="px-6 py-4 border-b bg-slate-50 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <h2 class="font-semibold text-slate-900">API Papers</h2>
+        <p class="text-xs text-slate-500">Select one API record to compare with the selected uploaded paper.</p>
+      </div>
+      <div id="apiPapersCount" class="text-xs font-medium text-slate-500"></div>
+    </div>
+    <div id="apiPapersList" class="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+  </section>
+
+  <!-- Side-by-side comparison -->
+  <section id="comparisonCard" class="hidden">
+    <div class="mb-4">
+      <h2 class="text-xl font-bold text-slate-900">Metadata Comparison</h2>
+      <p class="text-sm text-slate-500">The selected model-extracted paper and API paper are shown side by side.</p>
+    </div>
+
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+      <!-- Model data -->
+      <article class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="px-6 py-4 border-b bg-slate-50 flex justify-between gap-4">
+          <div>
+            <div class="text-xs text-slate-400 uppercase">Model Extraction</div>
+            <div id="modelSource" class="font-semibold text-slate-900 mt-1"></div>
+          </div>
+          <div id="modelQuality" class="font-bold text-blue-700 whitespace-nowrap"></div>
+        </div>
+        <div id="modelPanel" class="p-6"></div>
+      </article>
+
+      <!-- API data -->
+      <article class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="px-6 py-4 border-b bg-slate-50 flex justify-between gap-4">
+          <div>
+            <div class="text-xs text-slate-400 uppercase">API / Crossref</div>
+            <div id="apiSource" class="font-semibold text-slate-900 mt-1"></div>
+          </div>
+          <div class="font-bold text-emerald-700 whitespace-nowrap">API Data</div>
+        </div>
+        <div id="apiPanel" class="p-6"></div>
+      </article>
+    </div>
+  </section>
+
+  <section id="noApiComparison" class="hidden bg-amber-50 border border-amber-200 text-amber-800 rounded-xl p-4 text-sm">
+    Upload a paper with a DOI. The DOI extracted by the model is used automatically to fetch API data for comparison. You can switch between multiple uploaded papers.
+  </section>
+</main>
+
+<!-- API data modal -->
+<div id="apiModal" class="hidden fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+  <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+    <div class="flex justify-between items-start gap-4">
+      <div>
+        <h2 class="text-lg font-semibold text-slate-900">Get data from API</h2>
+        <p class="text-sm text-slate-500 mt-1">The DOI is taken automatically from the model-extracted data of the selected paper. You do not need to enter it manually.</p>
+      </div>
+      <button type="button" id="closeModal" class="text-slate-400 hover:text-slate-700 text-xl">&times;</button>
+    </div>
+    <div class="mt-5 space-y-4">
+      <div class="bg-slate-50 border border-slate-200 rounded-lg p-4">
+        <div class="text-xs font-semibold uppercase text-slate-400">Selected Paper</div>
+        <div id="apiSelectedPaper" class="font-medium text-slate-900 mt-1">N/A</div>
+        <div class="text-xs font-semibold uppercase text-slate-400 mt-3">DOI extracted by model</div>
+        <div id="apiDetectedDoi" class="text-sm text-slate-700 mt-1 break-all">N/A</div>
+      </div>
+      <div id="apiError" class="hidden bg-red-50 border border-red-200 text-red-700 p-3 rounded-lg text-sm"></div>
+      <div id="apiSuccess" class="hidden bg-emerald-50 border border-emerald-200 text-emerald-700 p-3 rounded-lg text-sm">
+        <div id="apiSuccessMessage">Data has been saved successfully.</div>
+        <div id="apiSavedCount" class="text-xs mt-1"></div>
+      </div>
+      <div class="flex flex-wrap justify-end gap-2">
+        <button type="button" id="downloadApiBtn" disabled class="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed">Download API Excel</button>
+        <button type="button" id="cancelModal" class="px-4 py-2 rounded-lg border border-slate-300 text-sm">Close</button>
+        <button type="button" id="apiSubmit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium">Get API Data</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+.label{font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#94a3b8;margin-bottom:.25rem}
+.data-value{font-size:.9rem;color:#334155;line-height:1.5;word-break:break-word}
+.compare-row{border-bottom:1px solid #e2e8f0;padding:12px 0}
+.compare-row:last-child{border-bottom:0}
+.paper-button{transition:all .15s ease}
+</style>
+
+<script>
+const dropzone=document.getElementById('dropzone');
+const input=document.getElementById('fileInput');
+const browse=document.getElementById('browse');
+const loading=document.getElementById('loading');
+const errorBox=document.getElementById('errorBox');
+
+const uploadedSection=document.getElementById('uploadedSection');
+const uploadedList=document.getElementById('uploadedList');
+const uploadedCount=document.getElementById('uploadedCount');
+
+const apiPapersSection=document.getElementById('apiPapersSection');
+const apiPapersList=document.getElementById('apiPapersList');
+const apiPapersCount=document.getElementById('apiPapersCount');
+
+const comparisonCard=document.getElementById('comparisonCard');
+const noApiComparison=document.getElementById('noApiComparison');
+
+const apiModal=document.getElementById('apiModal');
+const apiExportBtn=document.getElementById('apiExportBtn');
+const closeModal=document.getElementById('closeModal');
+const cancelModal=document.getElementById('cancelModal');
+const apiSelectedPaper=document.getElementById('apiSelectedPaper');
+const apiDetectedDoi=document.getElementById('apiDetectedDoi');
+const apiError=document.getElementById('apiError');
+const apiSuccess=document.getElementById('apiSuccess');
+const apiSuccessMessage=document.getElementById('apiSuccessMessage');
+const apiSavedCount=document.getElementById('apiSavedCount');
+const apiSubmit=document.getElementById('apiSubmit');
+const downloadApiBtn=document.getElementById('downloadApiBtn');
+
+// UI-only state. Excel behavior remains completely server-side and unchanged.
+const uploadedPapers=[];
+const apiPapers=[];
+let selectedUploadedIndex=-1;
+let selectedApiIndex=-1;
+
+browse.onclick=()=>input.click();
+dropzone.onclick=e=>{if(e.target!==browse) input.click()};
+['dragenter','dragover'].forEach(e=>dropzone.addEventListener(e,x=>{x.preventDefault();dropzone.classList.add('border-blue-500','bg-blue-50')}));
+['dragleave','drop'].forEach(e=>dropzone.addEventListener(e,x=>{x.preventDefault();dropzone.classList.remove('border-blue-500','bg-blue-50')}));
+dropzone.addEventListener('drop',e=>{if(e.dataTransfer.files[0]) upload(e.dataTransfer.files[0])});
+input.onchange=e=>{if(e.target.files[0]) upload(e.target.files[0])};
+
+function val(x){
+  if(x===null || x===undefined || x==='' || (Array.isArray(x)&&x.length===0)) return 'N/A';
+  return x;
+}
+
+async function upload(file){
+  if(!file.name.toLowerCase().endsWith('.pdf')) return showError('Only PDF files are supported.');
+  loading.classList.remove('hidden');
+  errorBox.classList.add('hidden');
+
+  const fd=new FormData();
+  fd.append('file',file);
+
+  try{
+    const r=await fetch('/extract',{method:'POST',body:fd});
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.message||d.detail||'Extraction failed');
+
+    // Keep every uploaded paper in browser memory for this page session.
+    uploadedPapers.push(d.metadata);
+    selectedUploadedIndex=uploadedPapers.length-1;
+
+    // Use the DOI extracted by the model. The user is never asked to enter it.
+    const uploadedDoi=normalizeDoi(d.metadata?.doi);
+    renderPaperSelectors();
+
+    if(uploadedDoi){
+      const match=apiPapers.findIndex(p=>normalizeDoi(p?.doi)===uploadedDoi);
+      if(match>=0){
+        selectedApiIndex=match;
+        renderPaperSelectors();
+        renderComparison();
+      }else{
+        // Automatically fetch Crossref data for this uploaded paper.
+        await fetchApiForSelectedPaper(d.metadata);
+      }
+    }
+
+    renderPaperSelectors();
+    renderComparison();
+  }catch(e){
+    showError(e.message);
+  }finally{
+    loading.classList.add('hidden');
+    input.value='';
+  }
+}
+
+function renderPaperSelectors(){
+  uploadedSection.classList.toggle('hidden',uploadedPapers.length===0);
+  apiPapersSection.classList.toggle('hidden',apiPapers.length===0);
+
+  uploadedCount.textContent=`${uploadedPapers.length} paper${uploadedPapers.length===1?'':'s'} uploaded`;
+  apiPapersCount.textContent=`${apiPapers.length} API record${apiPapers.length===1?'':'s'} saved`;
+
+  uploadedList.innerHTML='';
+  uploadedPapers.forEach((paper,index)=>{
+    const button=document.createElement('button');
+    button.type='button';
+    button.className=`paper-button text-left border rounded-lg p-4 ${index===selectedUploadedIndex?'border-blue-500 bg-blue-50 ring-1 ring-blue-200':'border-slate-200 bg-white hover:border-blue-300 hover:bg-slate-50'}`;
+    button.innerHTML=`
+      <div class="text-xs font-semibold uppercase ${index===selectedUploadedIndex?'text-blue-700':'text-slate-400'}">Paper ${index+1}</div>
+      <div class="font-medium text-sm text-slate-900 mt-1">${escapeHtml(paper.title||paper.source_file||'Untitled paper')}</div>
+      <div class="text-xs text-slate-500 mt-2">${escapeHtml(paper.source_file||'Uploaded PDF')}</div>`;
+    button.onclick=()=>{
+      selectedUploadedIndex=index;
+      const uploadedDoi=normalizeDoi(paper.doi);
+      if(uploadedDoi){
+        const match=apiPapers.findIndex(p=>normalizeDoi(p?.doi)===uploadedDoi);
+        if(match>=0) selectedApiIndex=match;
+      }
+      renderPaperSelectors();
+      renderComparison();
+    };
+    uploadedList.appendChild(button);
+  });
+
+  apiPapersList.innerHTML='';
+  apiPapers.forEach((paper,index)=>{
+    const button=document.createElement('button');
+    button.type='button';
+    button.className=`paper-button text-left border rounded-lg p-4 ${index===selectedApiIndex?'border-emerald-500 bg-emerald-50 ring-1 ring-emerald-200':'border-slate-200 bg-white hover:border-emerald-300 hover:bg-slate-50'}`;
+    button.innerHTML=`
+      <div class="text-xs font-semibold uppercase ${index===selectedApiIndex?'text-emerald-700':'text-slate-400'}">API Paper ${index+1}</div>
+      <div class="font-medium text-sm text-slate-900 mt-1">${escapeHtml(paper.title||'Untitled paper')}</div>
+      <div class="text-xs text-slate-500 mt-2">DOI: ${escapeHtml(paper.doi||'N/A')}</div>`;
+    button.onclick=()=>{
+      selectedApiIndex=index;
+      renderPaperSelectors();
+      renderComparison();
+    };
+    apiPapersList.appendChild(button);
+  });
+}
+
+function renderComparison(){
+  const model=uploadedPapers[selectedUploadedIndex];
+  const api=apiPapers[selectedApiIndex];
+
+  if(!model){
+    comparisonCard.classList.add('hidden');
+    noApiComparison.classList.add('hidden');
+    return;
+  }
+
+  if(!api){
+    comparisonCard.classList.add('hidden');
+    noApiComparison.classList.remove('hidden');
+    return;
+  }
+
+  noApiComparison.classList.add('hidden');
+  comparisonCard.classList.remove('hidden');
+
+  document.getElementById('modelSource').textContent=val(model.source_file);
+  document.getElementById('modelQuality').textContent=`Quality: ${model._quality_score||0}/100`;
+  document.getElementById('apiSource').textContent=val(api.source_file);
+
+  document.getElementById('modelPanel').innerHTML=buildMetadataPanel(model,true);
+  document.getElementById('apiPanel').innerHTML=buildMetadataPanel(api,false);
+}
+
+function buildMetadataPanel(d,isModel){
+  const authors=(d.authors||[]).map(x=>{
+    const name=escapeHtml(x.name||'N/A');
+    const affiliation=escapeHtml(x.affiliation||'N/A');
+    const email=x.email?` • ${escapeHtml(x.email)}`:'';
+    return `<div class="bg-slate-50 border rounded p-3 mb-2"><b>${name}</b><div class="text-xs text-slate-500 mt-1">${affiliation}${email}</div></div>`;
+  }).join('')||'<span class="data-value">N/A</span>';
+
+  const keywords=Array.isArray(d.keywords)?d.keywords.join(', '):d.keywords;
+  const issn=[
+    d.issn?`ISSN: ${d.issn}`:'',
+    d.eissn?`eISSN: ${d.eissn}`:'',
+    d.isbn?`ISBN: ${d.isbn}`:''
+  ].filter(Boolean).join(' | ')||'N/A';
+
+  const rows=[
+    ['Title',d.title,'font-semibold text-slate-900'],
+    ['Authors',authors,''],
+    ['Article Type',d.article_type,''],
+    ['Journal / Venue',d.journal_or_venue,''],
+    ['Volume',d.volume,''],
+    ['Publication Date',d.publication_date,''],
+    ['Publisher',d.publisher,''],
+    ['Conference / Event',d.conference_event,''],
+    ['Issue',d.issue,''],
+    ['Pages',d.pages,''],
+    ['DOI',d.doi,''],
+    ['arXiv ID',d.arxiv_id,''],
+    ['ISSN / eISSN / ISBN',issn,''],
+    ['Language',d.language,''],
+    ['Keywords',keywords,''],
+    ['Abstract',d.abstract,'']
+  ];
+
+  return rows.map(([label,value,extra])=>{
+    const isAuthors=label==='Authors';
+    const isAbstract=label==='Abstract';
+    const content=isAuthors || isAbstract
+      ? (isAuthors ? `<div>${value}</div>` : `<div class="bg-slate-50 border rounded-lg p-4 text-sm leading-relaxed max-h-56 overflow-auto">${escapeHtml(val(value))}</div>`)
+      : `<div class="data-value ${extra}">${escapeHtml(val(value))}</div>`;
+    return `<div class="compare-row"><div class="label">${label}</div>${content}</div>`;
+  }).join('');
+}
+
+function normalizeDoi(doi){
+  return String(doi||'').trim().toLowerCase()
+    .replace(/^https?:\/\/(?:dx\.)?doi\.org\//,'')
+    .replace(/^doi\s*:\s*/,'')
+    .replace(/[.,;)]$/,'');
+}
+
+function escapeHtml(value){
+  return String(value).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+}
+
+function showError(m){
+  errorBox.textContent=m;
+  errorBox.classList.remove('hidden');
+}
+
+function openApiModal(){
+  const paper=uploadedPapers[selectedUploadedIndex];
+  apiModal.classList.remove('hidden');
+  apiError.classList.add('hidden');
+  apiSuccess.classList.add('hidden');
+  apiSelectedPaper.textContent=paper?.title || paper?.source_file || 'No paper selected';
+  apiDetectedDoi.textContent=paper?.doi || 'No DOI was detected by the model.';
+  apiSubmit.disabled=!normalizeDoi(paper?.doi);
+}
+
+function closeApiModal(){
+  apiModal.classList.add('hidden');
+  apiError.classList.add('hidden');
+  apiSuccess.classList.add('hidden');
+  apiSavedCount.textContent='';
+  apiSubmit.disabled=false;
+  apiSubmit.textContent='Get API Data';
+}
+
+async function fetchApiForSelectedPaper(paper){
+  const doi=normalizeDoi(paper?.doi);
+  if(!doi){
+    return {ok:false,message:'No DOI was detected in the model-extracted data for this paper.'};
+  }
+
+  try{
+    const response=await fetch('/fetch-api-data?doi='+encodeURIComponent(doi),{method:'POST'});
+    if(!response.ok){
+      let message='API data fetch failed.';
+      try{const body=await response.json();message=body.detail||message}catch(_){ }
+      throw new Error(message);
+    }
+
+    const data=await response.json();
+    const metadata=data.metadata;
+
+    // Keep all API records in the UI. Excel behavior remains server-side and unchanged.
+    const existing=apiPapers.findIndex(p=>normalizeDoi(p?.doi)===normalizeDoi(metadata?.doi));
+    if(existing>=0){
+      apiPapers[existing]=metadata;
+      selectedApiIndex=existing;
+    }else{
+      apiPapers.push(metadata);
+      selectedApiIndex=apiPapers.length-1;
+    }
+
+    const matchUploaded=uploadedPapers.findIndex(p=>normalizeDoi(p?.doi)===normalizeDoi(metadata?.doi));
+    if(matchUploaded>=0) selectedUploadedIndex=matchUploaded;
+
+    renderPaperSelectors();
+    renderComparison();
+    return {ok:true,data};
+  }catch(error){
+    return {ok:false,message:error.message};
+  }
+}
+
+apiExportBtn.onclick=openApiModal;
+closeModal.onclick=closeApiModal;
+cancelModal.onclick=closeApiModal;
+apiModal.addEventListener('click',e=>{if(e.target===apiModal)closeApiModal()});
+
+apiSubmit.addEventListener('click',async()=>{
+  const paper=uploadedPapers[selectedUploadedIndex];
+  apiError.classList.add('hidden');
+  apiSuccess.classList.add('hidden');
+
+  if(!paper){
+    apiError.textContent='Please upload a paper first.';
+    apiError.classList.remove('hidden');
+    return;
+  }
+
+  const doi=normalizeDoi(paper.doi);
+  apiSelectedPaper.textContent=paper.title||paper.source_file||'Selected paper';
+  apiDetectedDoi.textContent=paper.doi||'No DOI was detected by the model.';
+
+  if(!doi){
+    apiError.textContent='The model did not extract a DOI from this paper, so API data cannot be fetched automatically.';
+    apiError.classList.remove('hidden');
+    return;
+  }
+
+  apiSubmit.disabled=true;
+  apiSubmit.textContent='Fetching and saving...';
+
+  const result=await fetchApiForSelectedPaper(paper);
+  if(result.ok){
+    const data=result.data;
+    apiSuccessMessage.textContent='Data has been saved successfully.';
+    apiSavedCount.textContent=data.saved_count?`Papers saved in API Excel: ${data.saved_count}`:'';
+    apiSuccess.classList.remove('hidden');
+    downloadApiBtn.disabled=false;
+  }else{
+    apiError.textContent=result.message;
+    apiError.classList.remove('hidden');
+  }
+
+  apiSubmit.disabled=false;
+  apiSubmit.textContent='Get API Data';
+});
+
+downloadApiBtn.addEventListener('click',async()=>{
+  downloadApiBtn.disabled=true;
+  const oldText=downloadApiBtn.textContent;
+  downloadApiBtn.textContent='Preparing Excel...';
+  try{
+    const response=await fetch('/download-api-excel');
+    if(!response.ok){
+      let message='Could not download API Excel.';
+      try{const body=await response.json();message=body.detail||message}catch(_){ }
+      throw new Error(message);
+    }
+    const blob=await response.blob();
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;
+    a.download='papers_metadata_from_api.xlsx';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }catch(error){
+    apiError.textContent=error.message;
+    apiError.classList.remove('hidden');
+  }finally{
+    downloadApiBtn.disabled=false;
+    downloadApiBtn.textContent=oldText;
+  }
+});
+</script>
+</body>
+</html>
